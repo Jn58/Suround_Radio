@@ -79,6 +79,7 @@ public class MainActivity extends AppCompatActivity implements
     EditText editTextPort;
     private AudioStream audioStream;
     private AudioGroup audioGroup;
+    int count=0;
 
     //Socket START/////////////////////////////////////////////////////////////////////////////
     long socketInterval=0;
@@ -353,6 +354,10 @@ public class MainActivity extends AppCompatActivity implements
             remoteLo.setText(String.valueOf(remoteLog));
 
         }
+        if(count++>=100){
+            count =0;
+            
+        }
 
     }
 
@@ -575,6 +580,12 @@ public class MainActivity extends AppCompatActivity implements
 
         out.println("-1");
         Log.d("socket","data sent");
+    }
+    public int volumeCalc(double ear, double angle){
+        double ang=(ear>angle)?ear-angle:angle-ear;
+        if (ang>180)
+            ang = 360-ang;
+        return (int)((double)100 -ang/2);
     }
 }
 
