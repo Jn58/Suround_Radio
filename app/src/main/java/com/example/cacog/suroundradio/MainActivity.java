@@ -64,6 +64,7 @@ public class MainActivity extends AppCompatActivity implements
     Location mLastLocation;
 
 
+
     SensorManager mSensorManager;
     Sensor accelerometer;
     Sensor magnetometer;
@@ -80,6 +81,7 @@ public class MainActivity extends AppCompatActivity implements
     private AudioGroup audioGroup;
 
     //Socket START/////////////////////////////////////////////////////////////////////////////
+    long socketInterval=0;
     boolean isConnected = false;
     ServerSocket serverSocket=null;
     Socket socket = null;
@@ -88,9 +90,11 @@ public class MainActivity extends AppCompatActivity implements
     PrintWriter out;
     double remoteLat=0;
     double remoteLog=0;
+    boolean remoteChange = false;
     static final int SERVERPORT = 5000;
     static int command = 0;
-    //Socket END/////////////////////////////////////////////////////////////////////////////
+
+    //Socket END////////////////////////////////////////!/////////////////////////////////////
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -163,6 +167,7 @@ public class MainActivity extends AppCompatActivity implements
         //Socket START/////////////////////////////////////////////////////////////////////////////
         remoteLa = (TextView) findViewById(R.id.remoteLa);
         remoteLo = (TextView) findViewById(R.id.remoteLo);
+        updateHandler = new Handler();
 
         //Socket END/////////////////////////////////////////////////////////////////////////////
 
@@ -342,6 +347,12 @@ public class MainActivity extends AppCompatActivity implements
                 myDirection.setText(String.valueOf(orientation[0]*180.0f/Math.PI));
             }
         }
+        if(remoteChange){
+            remoteChange=false;
+            remoteLa.setText(String.valueOf(remoteLat));
+            remoteLo.setText(String.valueOf(remoteLog));
+
+        }
 
     }
 
@@ -398,16 +409,21 @@ public class MainActivity extends AppCompatActivity implements
     void buttonGuest(View v)
     {
         InetAddress remoteIP=null;
+        Log.d("socket","guest button");
         String remotePort=editTextPort.getText().toString();
         try {
             remoteIP=InetAddress.getByName(editTextIP.getText().toString());
         } catch (Exception e){
             e.printStackTrace();
         }
-        audioStream.associate(remoteIP, Integer.valueOf(remotePort));
-        audioStream.join(audioGroup);
+        if(!remotePort.isEmpty()){
+            socketInterval = 1000;
+            audioStream.associate(remoteIP, Integer.valueOf(remotePort));
+            audioStream.join(audioGroup);
+        }
 
         new Thread(new ClientThread(remoteIP)).start();
+        Log.d("socket","guest button end");
 
 
     }
@@ -463,7 +479,9 @@ public class MainActivity extends AppCompatActivity implements
             Log.d("socket","communication start");
             try {
                 this.input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())));
+                out = new PrintWriter(new BufferedWriter(
+                        new OutputStreamWriter(socket.getOutputStream())),
+                        true);
              } catch (IOException e) {
                 e.printStackTrace();
                 Log.d("socket","IOexception");
@@ -480,9 +498,17 @@ public class MainActivity extends AppCompatActivity implements
                 try {
                     Log.d("socket","communication run");
                     String read = input.readLine();
+
                     Log.d("socket",read);
-                    updateHandler.post(new inputHandling(read));
+                    new inputHandling(read).run();
+                    Log.d("socket","handler end");
                 } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                try{
+                    Thread.currentThread().sleep(1000,0);
+
+                } catch (Exception e) {
                     e.printStackTrace();
                 }
             }
@@ -494,37 +520,50 @@ public class MainActivity extends AppCompatActivity implements
         String value;
 
         public inputHandling(String string) {
+            Log.d("socket","handler start");
             this.string =string;
         }
         public void run(){
+            Log.d("socket","handler run");
             if(command!=0)
             {
-                if(Integer.valueOf(string)<0){
-                    command=0;
-                }
-                else {
-                    value=string;
-                    commandHandling(command,value);
-                }
+                Log.d("socket","command is set");
+
+                Log.d("socket","case 2 excute command");
+                value=string;
+                commandHandling(command,value);
+
             } else {
+                Log.d("socket","command is not set");
                 if(Integer.valueOf(string)<0)
                 {
+                    Log.d("socket","case 3 set command");
                     command =Integer.valueOf(string);
                 }
             }
         }
         private void commandHandling(int c, String value)
         {
+            Log.d("socket","start command handle");
             switch (c){
                 case -1:
-                    remoteLa.setText(value);
+                    Log.d("socket","setLat");
+                    Log.d("socket",value);
+
                     remoteLat=Double.valueOf(value);
+                    remoteChange=true;
+                    command=0;
                     break;
                 case -2:
-                    remoteLo.setText(value);
+                    Log.d("socket","setLog");
+                    Log.d("socket",value);
+
                     remoteLog=Double.valueOf(value);
+                    remoteChange=true;
+                    command=0;
                     break;
                 default:
+                    Log.d("socket","wrong command");
                     command=0;
                     break;
             }
@@ -533,7 +572,8 @@ public class MainActivity extends AppCompatActivity implements
     //Socket END/////////////////////////////////////////////////////////////////////////////
 
     public void sendData(View v){
-        out.println("Demo data");
+
+        out.println("-1");
         Log.d("socket","data sent");
     }
 }
