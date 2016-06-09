@@ -12,8 +12,10 @@ import android.net.rtp.AudioCodec;
 import android.net.rtp.AudioGroup;
 import android.net.rtp.AudioStream;
 import android.net.rtp.RtpStream;
+import android.os.Handler;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.TextView;
@@ -30,17 +32,31 @@ import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.Enumeration;
+
+//Socket START/////////////////////////////////////////////////////////////////////////////
+//Socket END/////////////////////////////////////////////////////////////////////////////
+
 
 public class MainActivity extends AppCompatActivity implements
         GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener, LocationListener, SensorEventListener {
 
     TextView myLa;
     TextView myLo;
+    TextView remoteLa;
+    TextView remoteLo;
     TextView myDirection;
 
     GoogleApiClient mGoogleApiClient;
@@ -62,6 +78,19 @@ public class MainActivity extends AppCompatActivity implements
     EditText editTextPort;
     private AudioStream audioStream;
     private AudioGroup audioGroup;
+
+    //Socket START/////////////////////////////////////////////////////////////////////////////
+    boolean isConnected = false;
+    ServerSocket serverSocket=null;
+    Socket socket = null;
+    Handler updateHandler=null;
+    Thread serverThread=null;
+    PrintWriter out;
+    double remoteLat=0;
+    double remoteLog=0;
+    static final int SERVERPORT = 5000;
+    static int command = 0;
+    //Socket END/////////////////////////////////////////////////////////////////////////////
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -131,12 +160,47 @@ public class MainActivity extends AppCompatActivity implements
 
         //VOID END/////////////////////////////////////////////////////////////////////////////////
 
+        //Socket START/////////////////////////////////////////////////////////////////////////////
+        remoteLa = (TextView) findViewById(R.id.remoteLa);
+        remoteLo = (TextView) findViewById(R.id.remoteLo);
+
+        //Socket END/////////////////////////////////////////////////////////////////////////////
+
+
 
 
     }
 
 
-    //Location START////////////////////////////////////////////////////////////////////////////
+    //Location and Orientation START////////////////////////////////////////////////////////////////////////////
+
+    class Kalman {
+        private double p=1;
+        public  float calc (float a, float b)
+        {
+            float result = (float)(p*a + (1-p) * b  +((Math.abs(a-b)>Math.PI)?((a>b)?((1-p)*Math.PI*2):((p-1)*Math.PI*2)):(0)) );
+            if(result>Math.PI) return (float)(result-2*Math.PI);
+            if(result<-Math.PI) return (float)(result+2*Math.PI);
+            else return result;
+
+        }
+        public  float calc (float a, float b, boolean half)
+        {
+            float result = (float)(p*a + (1-p) * b  +((Math.abs(a-b)>Math.PI/2)?((a>b)?((1-p)*Math.PI):((p-1)*Math.PI)):(0)) );
+            if(result>Math.PI/2) return (float)(result-Math.PI);
+            if(result<-Math.PI/2) return (float)(result+Math.PI);
+            else return result;
+
+        }
+        public void set( double p)
+        {
+            if (p>1) return;
+            if(p<0) return;
+            this.p=p;
+        }
+
+    }
+
     @Override
     public void onConnectionFailed(ConnectionResult arg0) {
         Toast.makeText(this, "Failed to connect...", Toast.LENGTH_SHORT).show();
@@ -178,6 +242,12 @@ public class MainActivity extends AppCompatActivity implements
         if (mLastLocation != null) {
             myLa.setText(String.valueOf(mLastLocation.getLatitude()));
             myLo.setText(String.valueOf(mLastLocation.getLongitude()));
+            if(isConnected){
+                out.println("-1");
+                out.println(mLastLocation.getLatitude());
+                out.println("-2");
+                out.println(mLastLocation.getLongitude());
+            }
         }
     }
 
@@ -236,6 +306,14 @@ public class MainActivity extends AppCompatActivity implements
         );
         AppIndex.AppIndexApi.end(client, viewAction);
         client.disconnect();
+
+        if(serverSocket != null){
+            try {
+                serverSocket.close();
+            } catch (IOException e){
+                e.printStackTrace();
+            }
+        }
     }
 
     @Override
@@ -312,48 +390,152 @@ public class MainActivity extends AppCompatActivity implements
         audioStream.join(audioGroup);
         textViewPort.setText(Integer.toString(audioStream.getLocalPort()));
 
+        serverThread = new Thread(new ServerThread());
+        serverThread.start();
+
     }
 
     void buttonGuest(View v)
     {
-        String remoteIP= editTextIP.getText().toString();
+        InetAddress remoteIP=null;
         String remotePort=editTextPort.getText().toString();
-        editTextPort.setText(Integer.valueOf(remotePort).toString()+"abc");
         try {
-            audioStream.associate(InetAddress.getByName(remoteIP), Integer.valueOf(remotePort));
-        }
-        catch(Exception e)
-        {
+            remoteIP=InetAddress.getByName(editTextIP.getText().toString());
+        } catch (Exception e){
             e.printStackTrace();
         }
+        audioStream.associate(remoteIP, Integer.valueOf(remotePort));
         audioStream.join(audioGroup);
+
+        new Thread(new ClientThread(remoteIP)).start();
+
+
     }
     //VOID END/////////////////////////////////////////////////////////////////////////////////
+
+    //Socket START/////////////////////////////////////////////////////////////////////////////
+    class ServerThread implements Runnable{
+        public void run(){
+            try{
+                serverSocket = new ServerSocket(SERVERPORT);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            while (!Thread.currentThread().isInterrupted()) {
+                try {
+                    socket = serverSocket.accept();
+                    Log.d("socket","check socket connected");
+                    while(!socket.isConnected());
+                    Log.d("socket","socket is connected");
+
+                    new Thread( new CommunicationThread()).start();
+                } catch (IOException e)
+                {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
+    class ClientThread implements Runnable {
+        InetAddress serverAddress;
+        public ClientThread(InetAddress serverAddress){
+            this.serverAddress =serverAddress;
+        }
+        public void run() {
+            try{
+                socket=new Socket(serverAddress,SERVERPORT);
+                Log.d("socket","try connect");
+                while(!socket.isConnected());
+                Log.d("socket","connected");
+                new Thread( new CommunicationThread()).start();
+            } catch (Exception e){
+                e.printStackTrace();
+            }
+
+        }
+    }
+
+    class CommunicationThread implements Runnable {
+        BufferedReader input;
+        public CommunicationThread() {
+            isConnected=true;
+            Log.d("socket","communication start");
+            try {
+                this.input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())));
+             } catch (IOException e) {
+                e.printStackTrace();
+                Log.d("socket","IOexception");
+            }
+            out.println("-1");
+            out.println("0");
+            out.println("-2");
+            out.println("0");
+            Log.d("socket","data sent");
+        }
+        public void run() {
+            Log.d("socket","communication run start");
+            while (!Thread.currentThread().isInterrupted()){
+                try {
+                    Log.d("socket","communication run");
+                    String read = input.readLine();
+                    Log.d("socket",read);
+                    updateHandler.post(new inputHandling(read));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+            Log.d("socket","communication run end");
+        }
+    }
+    class inputHandling implements Runnable {
+        String string;
+        String value;
+
+        public inputHandling(String string) {
+            this.string =string;
+        }
+        public void run(){
+            if(command!=0)
+            {
+                if(Integer.valueOf(string)<0){
+                    command=0;
+                }
+                else {
+                    value=string;
+                    commandHandling(command,value);
+                }
+            } else {
+                if(Integer.valueOf(string)<0)
+                {
+                    command =Integer.valueOf(string);
+                }
+            }
+        }
+        private void commandHandling(int c, String value)
+        {
+            switch (c){
+                case -1:
+                    remoteLa.setText(value);
+                    remoteLat=Double.valueOf(value);
+                    break;
+                case -2:
+                    remoteLo.setText(value);
+                    remoteLog=Double.valueOf(value);
+                    break;
+                default:
+                    command=0;
+                    break;
+            }
+        }
+    }
+    //Socket END/////////////////////////////////////////////////////////////////////////////
+
+    public void sendData(View v){
+        out.println("Demo data");
+        Log.d("socket","data sent");
+    }
 }
 
-class Kalman {
-    private double p=1;
-    public  float calc (float a, float b)
-    {
-        float result = (float)(p*a + (1-p) * b  +((Math.abs(a-b)>Math.PI)?((a>b)?((1-p)*Math.PI*2):((p-1)*Math.PI*2)):(0)) );
-        if(result>Math.PI) return (float)(result-2*Math.PI);
-        if(result<-Math.PI) return (float)(result+2*Math.PI);
-        else return result;
 
-    }
-    public  float calc (float a, float b, boolean half)
-    {
-        float result = (float)(p*a + (1-p) * b  +((Math.abs(a-b)>Math.PI/2)?((a>b)?((1-p)*Math.PI):((p-1)*Math.PI)):(0)) );
-        if(result>Math.PI/2) return (float)(result-Math.PI);
-        if(result<-Math.PI/2) return (float)(result+Math.PI);
-        else return result;
-
-    }
-    public void set( double p)
-    {
-        if (p>1) return;
-        if(p<0) return;
-        this.p=p;
-    }
-
-}
