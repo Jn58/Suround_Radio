@@ -7,11 +7,13 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.location.Location;
 import android.media.AudioManager;
+import android.media.MediaPlayer;
 import android.net.Uri;
 import android.net.rtp.AudioCodec;
 import android.net.rtp.AudioGroup;
 import android.net.rtp.AudioStream;
 import android.net.rtp.RtpStream;
+
 import android.os.Handler;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
@@ -35,16 +37,24 @@ import com.google.android.gms.location.LocationServices;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
+
+import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.net.HttpURLConnection;
 import java.net.InetAddress;
+import java.net.MalformedURLException;
 import java.net.NetworkInterface;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.Enumeration;
+import java.net.URL;
+
+
 
 //Socket START/////////////////////////////////////////////////////////////////////////////
 //Socket END/////////////////////////////////////////////////////////////////////////////
@@ -155,6 +165,22 @@ public class MainActivity extends AppCompatActivity implements
 
             AudioManager Audio = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
             Audio.setMode(AudioManager.MODE_IN_COMMUNICATION);
+            MediaPlayer mediaPlayer =new MediaPlayer();
+            mediaPlayer.setAudioStreamType(AudioManager.STREAM_VOICE_CALL);
+            mediaPlayer.setVolume((float)0,0);
+            mediaPlayer.start();
+            mediaPlayer.setAudioStreamType(AudioManager.STREAM_SYSTEM);
+            mediaPlayer.setVolume((float)0,0);
+            mediaPlayer.start();
+            mediaPlayer.setAudioStreamType(AudioManager.STREAM_RING);
+            mediaPlayer.setVolume((float)0,0);
+            mediaPlayer.start();
+            mediaPlayer.setAudioStreamType(AudioManager.STREAM_ALARM );
+            mediaPlayer.setVolume((float)0,0);
+            mediaPlayer.start();
+            mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC );
+            mediaPlayer.setVolume((float)0,0);
+            mediaPlayer.start();
         } catch (SocketException e) {
             e.printStackTrace();
         } catch (UnknownHostException e) {
@@ -254,6 +280,7 @@ public class MainActivity extends AppCompatActivity implements
                 out.println("-2");
                 out.println(mLastLocation.getLongitude());
             }
+
         }
     }
 
@@ -356,7 +383,14 @@ public class MainActivity extends AppCompatActivity implements
         }
         if(count++>=100){
             count =0;
-            
+            if(isConnected){
+                if(!audioStream.isBusy()){
+                    out.println("-20");
+                    out.println("0");
+                }
+
+            }
+
         }
 
     }
@@ -408,6 +442,8 @@ public class MainActivity extends AppCompatActivity implements
 
         serverThread = new Thread(new ServerThread());
         serverThread.start();
+        HttpPostData();
+        Toast.makeText(getApplicationContext(),"qswer",Toast.LENGTH_LONG).show();
 
     }
 
@@ -429,6 +465,9 @@ public class MainActivity extends AppCompatActivity implements
 
         new Thread(new ClientThread(remoteIP)).start();
         Log.d("socket","guest button end");
+
+
+
 
 
     }
@@ -557,21 +596,40 @@ public class MainActivity extends AppCompatActivity implements
 
                     remoteLat=Double.valueOf(value);
                     remoteChange=true;
-                    command=0;
                     break;
                 case -2:
                     Log.d("socket","setLog");
                     Log.d("socket",value);
-
                     remoteLog=Double.valueOf(value);
                     remoteChange=true;
-                    command=0;
+
+                    break;
+                case -10:
+                    if(!audioStream.isBusy()){
+                        socketInterval = 1000;
+                        InetAddress remoteIP=null;
+                        try {
+                            remoteIP=InetAddress.getByName(editTextIP.getText().toString());
+                        } catch (Exception e){
+                            e.printStackTrace();
+                        }
+                        audioStream.associate(remoteIP, Integer.valueOf(value));
+                        audioStream.join(audioGroup);
+
+                    }
+
+                    break;
+                case -20:
+                    out.println("-10");
+                    out.println(Integer.toString(audioStream.getLocalPort()));
                     break;
                 default:
                     Log.d("socket","wrong command");
-                    command=0;
+
                     break;
+
             }
+            command=0;
         }
     }
     //Socket END/////////////////////////////////////////////////////////////////////////////
@@ -587,6 +645,55 @@ public class MainActivity extends AppCompatActivity implements
             ang = 360-ang;
         return (int)((double)100 -ang/2);
     }
+
+    public void HttpPostData() {
+        try {
+            URL url_obj = new URL("http://alansynn.com/process.php?title=3ddd&host_user=test&host_ip=123&port_number=123");
+            HttpURLConnection con = (HttpURLConnection)url_obj.openConnection();
+
+            con.setRequestMethod("GET");              // default is GET
+
+            con.setDoInput(true);                            // default is true
+
+            con.setDoOutput(true);                          //default is false
+
+            InputStream in = con.getInputStream();
+
+            OutputStream out = con.getOutputStream();  // internally change to 'POST'
+
+            int resCode = con.getResponseCode();  // connect, send http reuqest, receive htttp request
+
+            System.out.println ("code = "+ resCode);
+        } catch (Exception e){
+            e.printStackTrace();
+        }
+    } // HttpPostData
+
+
+
+//    private class DownloadTask extends AsyncTask<String, Void, String> {
+//        @Override
+//        protected String doInBackground(String...urls){
+//            try{
+//                return loadFromNetwork(urls[0]);
+//            }catch(IOException e ){
+//                e.printStackTrace();
+//                return String("erro");
+//            }}/*** Uses the logging framework to display the output of the fetch* operation in the log fragment.*/
+//        @Override
+//        protected void onPostExecute(String result){
+//            Log.i("TAG",result);}}
+//    private String loadFromNetwork(String urlString) throws IOException {
+//        InputStream stream =null;
+//        String str ="";
+//        try{
+//            stream =downloadUrl(urlString);
+//            str =readIt(stream,500);
+//        } finally{
+//            if(stream !=null){
+//                stream.close();
+//            }
+//        }return str;}
 }
 
 
