@@ -467,12 +467,15 @@ public class MainActivity extends AppCompatActivity implements
         InetAddress remoteIP=null;
         Log.d("socket","guest button");
         EditText editRoomName=(EditText)findViewById(R.id.editRoomName);
-        if(editRoomName.getText().toString()!="")
+
+        if(!editRoomName.getText().toString().isEmpty())
         {
+            Log.d("http","room");
             new HttpRequest().getRoom(editRoomName.getText().toString());
         }
         else
         {
+            Log.d("http","ip");
             String remotePort=editTextPort.getText().toString();
             try {
                 remoteIP=InetAddress.getByName(editTextIP.getText().toString());
@@ -729,6 +732,7 @@ public class MainActivity extends AppCompatActivity implements
             //print result
             Log.d("http",response.toString());
             //editTextIP.setText(response.toString());
+            Log.d("http","com : "+Integer.toString(com));
             if(com==1){
                 Log.d("http","start parsing");
                 StringTokenizer str = new StringTokenizer(response.toString(), " ");
@@ -740,7 +744,6 @@ public class MainActivity extends AppCompatActivity implements
                 Log.d("http",remoteIP);
                 new Thread(new ClientThread(InetAddress.getByName(remoteIP))).start();
             }
-            com=-1;
 
         }
         public void makeRoom(String title,String host_user, String host_ip, String port_number ) throws Exception {
