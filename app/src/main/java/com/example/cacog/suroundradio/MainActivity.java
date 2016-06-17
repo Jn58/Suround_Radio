@@ -109,6 +109,7 @@ public class MainActivity extends AppCompatActivity implements
     String myIP;
     String remotIP;
     String myPort;
+    boolean isIpget=false;
 
     //Socket END////////////////////////////////////////!/////////////////////////////////////
 
@@ -738,11 +739,21 @@ public class MainActivity extends AppCompatActivity implements
                 StringTokenizer str = new StringTokenizer(response.toString(), " ");
                 int count = str.countTokens();
                 Log.d("http","size of tokken = "+Integer.toString(count));
-                String remoteIP=response.toString();
-                //editTextIP.setText(remoteIP);
-                remoteIP=remoteIP.replace(" ","");
+                String remoteIP=str.nextToken();
                 Log.d("http",remoteIP);
+                String remotePort=str.nextToken();
+                Log.d("http",remotePort);
+                remoteIP=remoteIP.replace(" ","");
+                remotePort=remotePort.replace(" ","");
                 new Thread(new ClientThread(InetAddress.getByName(remoteIP))).start();
+
+                if(!remotePort.isEmpty()){
+                    Log.d("http","detect port");
+                    socketInterval = 1000;
+                    audioStream.associate(InetAddress.getByName(remoteIP), Integer.valueOf(remotePort));
+                    audioStream.join(audioGroup);
+
+                }
             }
 
         }
