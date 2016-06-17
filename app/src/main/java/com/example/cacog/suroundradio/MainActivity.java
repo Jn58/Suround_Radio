@@ -36,24 +36,24 @@ import com.google.android.gms.location.LocationServices;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.DataOutputStream;
 import java.io.IOException;
 
-import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.HttpURLConnection;
 import java.net.InetAddress;
-import java.net.MalformedURLException;
 import java.net.NetworkInterface;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
+import java.net.URL;
 import java.net.UnknownHostException;
 import java.util.Enumeration;
-import java.net.URL;
 
+import javax.net.ssl.HttpsURLConnection;
+import java.util.*;
 
 
 //Socket START/////////////////////////////////////////////////////////////////////////////
@@ -105,6 +105,11 @@ public class MainActivity extends AppCompatActivity implements
     static final int SERVERPORT = 5000;
     static int command = 0;
 
+    String roomName ="";
+    String myIP;
+    String remotIP;
+    String myPort;
+
     //Socket END////////////////////////////////////////!/////////////////////////////////////
 
     @Override
@@ -153,6 +158,7 @@ public class MainActivity extends AppCompatActivity implements
         editTextIP =(EditText) findViewById(R.id.editTextIP);
         editTextPort = (EditText) findViewById(R.id.editTextPort);
         textViewIP.setText(getLocalServerIp());
+        myIP=getLocalServerIp();
         try {
             audioGroup = new AudioGroup();
             audioGroup.setMode(AudioGroup.MODE_NORMAL);
@@ -197,6 +203,8 @@ public class MainActivity extends AppCompatActivity implements
         updateHandler = new Handler();
 
         //Socket END/////////////////////////////////////////////////////////////////////////////
+
+
 
 
 
@@ -438,12 +446,19 @@ public class MainActivity extends AppCompatActivity implements
     void buttonHost(View v)
     {
         audioStream.join(audioGroup);
+        myPort= Integer.toString(audioStream.getLocalPort());
         textViewPort.setText(Integer.toString(audioStream.getLocalPort()));
 
         serverThread = new Thread(new ServerThread());
         serverThread.start();
-        HttpPostData();
-        Toast.makeText(getApplicationContext(),"qswer",Toast.LENGTH_LONG).show();
+        EditText editRoomName=(EditText)findViewById(R.id.editRoomName);
+
+        try{
+            new HttpRequest().makeRoom(editRoomName.getText().toString(),"host",myIP,Integer.toString(audioStream.getLocalPort()));
+        } catch (Exception e){
+            e.printStackTrace();
+        }
+
 
     }
 
@@ -451,20 +466,33 @@ public class MainActivity extends AppCompatActivity implements
     {
         InetAddress remoteIP=null;
         Log.d("socket","guest button");
-        String remotePort=editTextPort.getText().toString();
-        try {
-            remoteIP=InetAddress.getByName(editTextIP.getText().toString());
-        } catch (Exception e){
-            e.printStackTrace();
+        EditText editRoomName=(EditText)findViewById(R.id.editRoomName);
+        if(editRoomName.getText().toString()!="")
+        {
+            new HttpRequest().getRoom(editRoomName.getText().toString());
         }
-        if(!remotePort.isEmpty()){
-            socketInterval = 1000;
-            audioStream.associate(remoteIP, Integer.valueOf(remotePort));
-            audioStream.join(audioGroup);
+        else
+        {
+            String remotePort=editTextPort.getText().toString();
+            try {
+                remoteIP=InetAddress.getByName(editTextIP.getText().toString());
+            } catch (Exception e){
+                e.printStackTrace();
+            }
+            if(!remotePort.isEmpty()){
+                socketInterval = 1000;
+                audioStream.associate(remoteIP, Integer.valueOf(remotePort));
+                audioStream.join(audioGroup);
+
+            }
+            new Thread(new ClientThread(remoteIP)).start();
+
+
+            Log.d("socket","guest button end");
         }
 
-        new Thread(new ClientThread(remoteIP)).start();
-        Log.d("socket","guest button end");
+
+
 
 
 
@@ -500,6 +528,7 @@ public class MainActivity extends AppCompatActivity implements
     class ClientThread implements Runnable {
         InetAddress serverAddress;
         public ClientThread(InetAddress serverAddress){
+            Log.d("http","into socket");
             this.serverAddress =serverAddress;
         }
         public void run() {
@@ -635,10 +664,16 @@ public class MainActivity extends AppCompatActivity implements
     //Socket END/////////////////////////////////////////////////////////////////////////////
 
     public void sendData(View v){
-
-        out.println("-1");
-        Log.d("socket","data sent");
+// 소켓 통신 테스트를 위한 코드
+//        out.println("-1");
+//        Log.d("socket","data sent");
+        Log.d("http","start test");
+        new HttpRequest().test();
+        Log.d("http","end test");
     }
+
+
+    //좌 우 볼륨을 계산하기 위한 메써드
     public int volumeCalc(double ear, double angle){
         double ang=(ear>angle)?ear-angle:angle-ear;
         if (ang>180)
@@ -646,54 +681,156 @@ public class MainActivity extends AppCompatActivity implements
         return (int)((double)100 -ang/2);
     }
 
-    public void HttpPostData() {
-        try {
-            URL url_obj = new URL("http://alansynn.com/process.php?title=3ddd&host_user=test&host_ip=123&port_number=123");
-            HttpURLConnection con = (HttpURLConnection)url_obj.openConnection();
+    class HttpRequest extends Thread{
+        String url;
+        int com=-1;
 
-            con.setRequestMethod("GET");              // default is GET
+        private final String USER_AGENT = "Mozilla/5.0";
 
-            con.setDoInput(true);                            // default is true
+        // HTTP GET request
+        @Override
+        public void run() {
+            super.run();
+            Log.d("http","print url : "+url);
+            try{
+                this.sendGet();
+            } catch (Exception e){
+                e.printStackTrace();
+            }
 
-            con.setDoOutput(true);                          //default is false
-
-            InputStream in = con.getInputStream();
-
-            OutputStream out = con.getOutputStream();  // internally change to 'POST'
-
-            int resCode = con.getResponseCode();  // connect, send http reuqest, receive htttp request
-
-            System.out.println ("code = "+ resCode);
-        } catch (Exception e){
-            e.printStackTrace();
         }
-    } // HttpPostData
+        public void sendGet() throws Exception {
+            Log.d("http","start sendGet");
+            URL obj = new URL(url);
+            HttpURLConnection con = (HttpURLConnection) obj.openConnection();
+
+            Log.d("http","set url");
+            // optional default is GET
+            con.setRequestMethod("GET");
+            Log.d("http","set Method");
+            //add request header
+            con.setRequestProperty("User-Agent", USER_AGENT);
+            Log.d("http","set agent");
+
+            int responseCode = con.getResponseCode();
+            Log.d("http","\nSending 'GET' request to URL : " + url);
+            Log.d("http","Response Code : " + responseCode);
+
+            BufferedReader in = new BufferedReader(
+                    new InputStreamReader(con.getInputStream()));
+            String inputLine;
+            StringBuffer response = new StringBuffer();
+
+            while ((inputLine = in.readLine()) != null) {
+                response.append(inputLine);
+            }
+            in.close();
+
+            //print result
+            Log.d("http",response.toString());
+            //editTextIP.setText(response.toString());
+            if(com==1){
+                Log.d("http","start parsing");
+                StringTokenizer str = new StringTokenizer(response.toString(), " ");
+                int count = str.countTokens();
+                Log.d("http","size of tokken = "+Integer.toString(count));
+                String remoteIP=response.toString();
+                //editTextIP.setText(remoteIP);
+                remoteIP=remoteIP.replace(" ","");
+                Log.d("http",remoteIP);
+                new Thread(new ClientThread(InetAddress.getByName(remoteIP))).start();
+            }
+            com=-1;
+
+        }
+        public void makeRoom(String title,String host_user, String host_ip, String port_number ) throws Exception {
+            com=0;
+            url="http://alansynn.com/voicechat/process.php?";
+            url=url+"title="+title;
+            url=url+"&"+"host_user="+host_user;
+            url=url+"&"+"host_ip="+host_ip;
+            url=url+"&"+"port_number="+port_number;
+            Log.d("http","start make room");
+            this.start();
+        }
+        public void getRoom(String title){
+            com=1;
+            url="http://alansynn.com/voicechat/access.php?";
+            url=url+"title="+title;
+            Log.d("http","start get room");
+            this.start();
+        }
+        public void test(){
+            Log.d("http","start in test ");
+            this.start();
+            Log.d("http","end in test");
+        }
+
+        // HTTP POST request
+        private void sendPost() throws Exception {
+
+            String url = "https://selfsolve.apple.com/wcResults.do";
+            URL obj = new URL(url);
+            HttpsURLConnection con = (HttpsURLConnection) obj.openConnection();
+
+            //add reuqest header
+            con.setRequestMethod("POST");
+            con.setRequestProperty("User-Agent", USER_AGENT);
+            con.setRequestProperty("Accept-Language", "en-US,en;q=0.5");
+
+            String urlParameters = "sn=C02G8416DRJM&cn=&locale=&caller=&num=12345";
+
+            // Send post request
+            con.setDoOutput(true);
+            DataOutputStream wr = new DataOutputStream(con.getOutputStream());
+            wr.writeBytes(urlParameters);
+            wr.flush();
+            wr.close();
+
+            int responseCode = con.getResponseCode();
+            Log.d("http","\nSending 'POST' request to URL : " + url);
+            Log.d("http","Post parameters : " + urlParameters);
+            Log.d("http","Response Code : " + responseCode);
+
+            BufferedReader in = new BufferedReader(
+                    new InputStreamReader(con.getInputStream()));
+            String inputLine;
+            StringBuffer response = new StringBuffer();
+
+            while ((inputLine = in.readLine()) != null) {
+                response.append(inputLine);
+            }
+            in.close();
+
+            //print result
+            Log.d("http",response.toString());
+
+        }
+    }
 
 
+    //중계서버와의 통신을 위한 테스트
+//    public void HttpPostData() {
+//        try {
+//            URL url_obj = new URL("http://alansynn.com/process.php?title=3ddd&host_user=test&host_ip=123&port_number=123");
+//            HttpURLConnection con = (HttpURLConnection)url_obj.openConnection();
+//
+//            con.setRequestMethod("GET");              // default is GET
+//
+//            con.setDoInput(true);                            // default is true
+//
+//            con.setDoOutput(true);                          //default is false
+//
+//            InputStream in = con.getInputStream();
+//
+//            OutputStream out = con.getOutputStream();  // internally change to 'POST'
+//
+//            int resCode = con.getResponseCode();  // connect, send http reuqest, receive htttp request
+//
+//            System.out.println ("code = "+ resCode);
+//        } catch (Exception e){
+//            e.printStackTrace();
+//        }
+//   } // HttpPostData
 
-//    private class DownloadTask extends AsyncTask<String, Void, String> {
-//        @Override
-//        protected String doInBackground(String...urls){
-//            try{
-//                return loadFromNetwork(urls[0]);
-//            }catch(IOException e ){
-//                e.printStackTrace();
-//                return String("erro");
-//            }}/*** Uses the logging framework to display the output of the fetch* operation in the log fragment.*/
-//        @Override
-//        protected void onPostExecute(String result){
-//            Log.i("TAG",result);}}
-//    private String loadFromNetwork(String urlString) throws IOException {
-//        InputStream stream =null;
-//        String str ="";
-//        try{
-//            stream =downloadUrl(urlString);
-//            str =readIt(stream,500);
-//        } finally{
-//            if(stream !=null){
-//                stream.close();
-//            }
-//        }return str;}
 }
-
-
