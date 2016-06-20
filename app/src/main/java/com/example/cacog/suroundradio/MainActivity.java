@@ -56,6 +56,8 @@ import javax.net.ssl.HttpsURLConnection;
 import java.util.*;
 
 
+
+
 //Socket START/////////////////////////////////////////////////////////////////////////////
 //Socket END/////////////////////////////////////////////////////////////////////////////
 
@@ -110,6 +112,9 @@ public class MainActivity extends AppCompatActivity implements
     String remotIP;
     String myPort;
     boolean isIpget=false;
+
+    double myLatitude = 0;
+    double myLongitude = 0;
 
     //Socket END////////////////////////////////////////!/////////////////////////////////////
 
@@ -263,8 +268,10 @@ public class MainActivity extends AppCompatActivity implements
                 super.onLocationAvailability(locationAvailability);
                 mLastLocation = LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient);
                 if (mLastLocation != null) {
-                    myLa.setText(String.valueOf(mLastLocation.getLatitude()));
-                    myLo.setText(String.valueOf(mLastLocation.getLongitude()));
+                    myLatitude = mLastLocation.getLatitude();
+                    myLongitude = mLastLocation.getLongitude();
+                    myLa.setText(String.valueOf(myLatitude));
+                    myLo.setText(String.valueOf(myLongitude));
                 }
             }
         };
@@ -281,13 +288,15 @@ public class MainActivity extends AppCompatActivity implements
     public void onLocationChanged(Location location) {
         mLastLocation = LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient);
         if (mLastLocation != null) {
-            myLa.setText(String.valueOf(mLastLocation.getLatitude()));
-            myLo.setText(String.valueOf(mLastLocation.getLongitude()));
+            myLatitude = mLastLocation.getLatitude();
+            myLongitude = mLastLocation.getLongitude();
+            myLa.setText(String.valueOf(myLatitude));
+            myLo.setText(String.valueOf(myLongitude));
             if(isConnected){
                 out.println("-1");
-                out.println(mLastLocation.getLatitude());
+                out.println(String.valueOf(myLatitude));
                 out.println("-2");
-                out.println(mLastLocation.getLongitude());
+                out.println(String.valueOf(myLongitude));
             }
 
         }
@@ -564,9 +573,9 @@ public class MainActivity extends AppCompatActivity implements
                 Log.d("socket","IOexception");
             }
             out.println("-1");
-            out.println("0");
+            out.println(String.valueOf(myLatitude));
             out.println("-2");
-            out.println("0");
+            out.println(String.valueOf(myLongitude));
             Log.d("socket","data sent");
         }
         public void run() {
